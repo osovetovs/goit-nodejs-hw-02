@@ -1,177 +1,152 @@
-# REST API Дошки оголошень
+# goit-nodejs-hw-02 — Announcements REST API
 
-REST API для дошки оголошень з JWT-автентифікацією, авторизацією та контролем доступу. Реалізовано в рамках курсового завдання магістратури.
+A REST API for an announcements board with JWT authentication, refresh token rotation, Prisma/PostgreSQL, Zod validation, ownership checks, and OpenAPI/Swagger documentation.
 
-## Загальний опис
+## Features
 
-Чистий JSON API без рендерингу HTML. Бекенд обслуговує клієнтів (React-застосунки, мобільні додатки тощо) через HTTP-запити.
+- `POST /auth/register` — registers a user, hashes the password with bcrypt, and returns access and refresh tokens.
+- `POST /auth/login` — authenticates a user; invalid username or password returns the same `401 Invalid credentials` response; the previous refresh token is replaced.
+- `POST /auth/refresh` — verifies the refresh JWT and checks that the token exists in the database, then performs refresh token rotation.
+- `POST /auth/logout` — protected route that removes the user's refresh token and returns `204`.
+- `GET /auth/me` — protected route that returns the authenticated user's profile without the `password`.
+- `GET /announcements` — public list with title search, `newest`/`oldest` sorting, and pagination with 10 records per page.
+- `GET /announcements/:id` — public route for retrieving a single announcement with its author.
+- `POST /announcements` — creates an announcement for the authenticated user; `userId` is taken only from the access token.
+- `PATCH /announcements/:id` — partially updates an announcement owned by the authenticated user.
+- `DELETE /announcements/:id` — deletes an announcement owned by the authenticated user and returns `204`.
+- Middleware: `authenticate`, `validateBody`, `validateParams`, and `validateQuery`.
+- Swagger UI is available at `/api-docs`.
 
-Користувачі можуть публікувати, редагувати та видаляти власні оголошення. Анонімні відвідувачі бачать список оголошень і можуть переглядати деталі. Для створення оголошення потрібна реєстрація. Редагувати та видаляти можна лише власні оголошення.
+## Tech Stack
 
-Автентифікація — JWT з refresh токенами. Access token: 15 хвилин, refresh token: 7 днів. Token rotation для refresh токенів.
+Node.js, TypeScript, Express 5, Prisma 7, PostgreSQL, Zod, bcrypt, jsonwebtoken, `@asteasolutions/zod-to-openapi`, and swagger-ui-express.
 
-## Технологічний стек
+## Installation and Setup
 
-| Технологія                     | Опис                            |
-| ------------------------------ | ------------------------------- |
-| Node.js                        | Середовище виконання            |
-| Express 5                      | Веб-фреймворк                   |
-| Prisma 7                       | ORM для бази даних (PostgreSQL) |
-| Zod                            | Валідація вхідних даних         |
-| bcrypt                         | Хешування паролів               |
-| jsonwebtoken                   | JWT-автентифікація              |
-| @asteasolutions/zod-to-openapi | Генерація OpenAPI документації  |
-| swagger-ui-express             | Swagger UI                      |
-| dotenv                         | Змінні середовища               |
-
-## Встановлення
-
-1. Встановіть залежності:
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-2. Створіть файл конфігурації:
+Create a `.env` file based on `.env.example`:
 
 ```bash
 cp .env.example .env
 ```
 
-3. Налаштуйте `.env`:
+On Windows CMD, you can use:
+
+```cmd
+copy .env.example .env
+```
+
+Set a valid PostgreSQL connection string and JWT secret in `.env`:
 
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5432/announcements?schema=public
-JWT_SECRET=your-secret-key-at-least-256-bits-long
+JWT_SECRET=replace_with_a_long_random_secret
+PORT=3000
 ```
 
-4. Застосуйте міграцію:
+Generate the Prisma client and apply migrations:
 
 ```bash
+npm run prisma:generate
 npm run prisma:migrate
 ```
 
-5. Запустіть проект:
+Start the development server:
 
 ```bash
 npm run dev
 ```
 
-## Маршрути
+Swagger UI:
 
-### Auth
-
-| Метод | Шлях             | Опис                          | Auth |
-| ----- | ---------------- | ----------------------------- | ---- |
-| POST  | `/auth/register` | Реєстрація користувача        | Ні   |
-| POST  | `/auth/login`    | Вхід користувача              | Ні   |
-| POST  | `/auth/refresh`  | Оновлення токенів             | Ні   |
-| POST  | `/auth/logout`   | Вихід                         | Ні   |
-| GET   | `/auth/me`       | Профіль поточного користувача | Так  |
-
-### Оголошення
-
-| Метод  | Шлях                 | Опис                                      | Auth |
-| ------ | -------------------- | ----------------------------------------- | ---- |
-| GET    | `/announcements`     | Список з пагінацією, пошуком, сортуванням | Ні   |
-| GET    | `/announcements/:id` | Деталі оголошення                         | Ні   |
-| POST   | `/announcements`     | Створення оголошення                      | Так  |
-| PATCH  | `/announcements/:id` | Часткове оновлення (власне)               | Так  |
-| DELETE | `/announcements/:id` | Видалення (власне)                        | Так  |
-
-## Параметри запитів
-
-### GET /announcements
-
-| Параметр | Тип   | Опис                                            |
-| -------- | ----- | ----------------------------------------------- |
-| `search` | query | Пошук по назві (нечутливий до регістру)         |
-| `sort`   | query | `newest` (за замовчуванням) або `oldest`        |
-| `page`   | query | Номер сторінки (число > 0), 10 записів/сторінка |
-
-### POST /auth/register
-
-| Поле       | Вимоги                                  |
-| ---------- | --------------------------------------- |
-| `username` | рядок, обов'язковий, 3–30 символів      |
-| `email`    | email, обов'язковий                     |
-| `password` | рядок, обов'язковий, мінімум 6 символів |
-| `name`     | рядок, обов'язковий, мінімум 2 символи  |
-
-### POST /announcements
-
-| Поле          | Вимоги                                                 |
-| ------------- | ------------------------------------------------------ |
-| `title`       | рядок, обов'язковий, 5–50 символів                     |
-| `description` | рядок, обов'язковий, мінімум 10 символів               |
-| `price`       | число, обов'язкове, > 0                                |
-| `category`    | рядок, обов'язковий: `sale`, `service`, `job`, `other` |
-
-PATCH використовує ті ж правила валідації, але всі поля опціональні (хоча б одне має бути присутнє).
-
-## Структура проекту
-
-```
-boilerplate/
-├── prisma/
-│   ├── schema.prisma
-│   ├── client.ts
-│   └── migrations/
-├── src/
-│   ├── controllers/
-│   │   ├── auth.controller.ts
-│   │   └── announcements.controller.ts
-│   ├── middleware/
-│   │   ├── authenticate.ts
-│   │   └── validate.ts
-│   ├── routes/
-│   │   ├── auth.routes.ts
-│   │   └── announcements.routes.ts
-│   ├── validators/
-│   │   ├── auth.validator.ts
-│   │   └── announcements.validator.ts
-│   └── openapi.ts
-├── app.ts
-├── .env.example
-├── .env
-├── package.json
-├── tsconfig.json
-├── prisma.config.ts
-└── README.md
+```text
+http://localhost:3000/api-docs
 ```
 
-## Бойлерплейт
+## Code Validation
 
-Мінімальний стартовий набір:
+Validate the Prisma schema:
 
-- `package.json` з усіма залежностями
-- `tsconfig.json` з налаштуваннями TypeScript
-- `src/openapi.ts` з ініціалізованим registry та `bearerAuth`
-- `prisma/client.ts` з ініціалізованим Prisma Client (PostgreSQL через `@prisma/adapter-pg`)
-- `prisma.config.ts` з конфігурацією Prisma
-- `.env.example` з шаблоном змінних середовища
+```bash
+npm run prisma:validate
+```
 
-## Доступні скрипти
+Run the TypeScript type checker:
 
-| Команда                   | Опис                                 |
-| ------------------------- | ------------------------------------ |
-| `npm run dev`             | Запуск з hot reload (`node --watch`) |
-| `npm start`               | Запуск у виробничому режимі          |
-| `npm run prisma:migrate`  | Створення та застосування міграцій   |
-| `npm run prisma:generate` | Генерація Prisma Client              |
+```bash
+npm run typecheck
+```
 
-## Документація API
+## API Endpoints
 
-Swagger UI доступний за адресою: http://localhost:3000/api-docs
+### Authentication
 
-## Prisma schema
+| Method | Route | Authentication |
+|---|---|---|
+| POST | `/auth/register` | No |
+| POST | `/auth/login` | No |
+| POST | `/auth/refresh` | No |
+| POST | `/auth/logout` | Bearer token |
+| GET | `/auth/me` | Bearer token |
 
-Три моделі: `User`, `RefreshToken`, `Announcement`.
+### Announcements
 
-- `User` — `username` (унікальний), хешований `password`, `email` (унікальний), `name`, `createdAt`
-- `RefreshToken` — `token` (унікальний), зв'язок з `User`
-- `Announcement` — `title`, `description`, `price`, `category`, зв'язок з `User`, `createdAt`, `updatedAt`
+| Method | Route | Authentication |
+|---|---|---|
+| GET | `/announcements` | No |
+| GET | `/announcements/:id` | No |
+| POST | `/announcements` | Bearer token |
+| PATCH | `/announcements/:id` | Bearer token + owner |
+| DELETE | `/announcements/:id` | Bearer token + owner |
 
-## Ліцензія
+### `GET /announcements` Query Parameters
 
-ISC
+- `search` — case-insensitive search by title.
+- `sort` — `newest` (default) or `oldest`.
+- `page` — positive page number.
+- `perPage` is fixed at `10`.
+
+Example response:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "total": 0,
+    "page": 1,
+    "totalPages": 0,
+    "perPage": 10
+  }
+}
+```
+
+## Validation Rules
+
+### `POST /auth/register`
+
+- `username`: required string, 3–30 characters
+- `email`: required valid email address
+- `password`: required string, minimum 6 characters
+- `name`: required string, minimum 2 characters
+
+### `POST /announcements`
+
+- `title`: required string, 5–50 characters
+- `description`: required string, minimum 10 characters
+- `price`: required number greater than 0
+- `category`: one of `sale`, `service`, `job`, `other`
+
+`PATCH /announcements/:id` uses the same validation rules, but all fields are optional and an empty `{}` request body is rejected.
+
+## Prisma Models
+
+- `User`: unique `username`, unique `email`, bcrypt-hashed `password`, `name`, and `createdAt`.
+- `RefreshToken`: unique `token` with a relation to `User`.
+- `Announcement`: `title`, `description`, `price`, `category`, author relation, `createdAt`, and automatic `updatedAt`.
+
+The included initial migration creates all three tables, unique indexes, relation indexes, and foreign keys.
